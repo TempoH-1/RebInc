@@ -3,6 +3,7 @@ local Players      = game:GetService("Players")
 local RS           = game:GetService("ReplicatedStorage")
 local RunService   = game:GetService("RunService")
 local HTTP         = game:GetService("HttpService")
+local UIS          = game:GetService("UserInputService")
 local player       = Players.LocalPlayer
 
 -- // FILE SYSTEM SETUP
@@ -69,6 +70,37 @@ local Window = WindUI:CreateWindow({
     NewElements = true,
 })
 
+-- // MOBILE TOGGLE BUTTON
+local MobileButton = Instance.new("ScreenGui")
+local ButtonFrame = Instance.new("Frame")
+local ButtonImage = Instance.new("ImageButton")
+local UICorner = Instance.new("UICorner")
+
+MobileButton.Name = "TempoHub_Mobile"
+MobileButton.Parent = game.CoreGui
+MobileButton.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+ButtonFrame.Name = "ButtonFrame"
+ButtonFrame.Parent = MobileButton
+ButtonFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+ButtonFrame.Position = UDim2.new(0.1, 0, 0.15, 0)
+ButtonFrame.Size = UDim2.new(0, 50, 0, 50)
+ButtonFrame.Active = true
+ButtonFrame.Draggable = true
+
+UICorner.CornerRadius = UDim.new(0, 10)
+UICorner.Parent = ButtonFrame
+
+ButtonImage.Parent = ButtonFrame
+ButtonImage.BackgroundTransparency = 1
+ButtonImage.Position = UDim2.new(0.1, 0, 0.1, 0)
+ButtonImage.Size = UDim2.new(0.8, 0, 0.8, 0)
+ButtonImage.Image = "rbxassetid://10723343321" -- Fish Icon
+
+ButtonImage.MouseButton1Click:Connect(function()
+    Window:Toggle()
+end)
+
 -- // TABS
 local MainTab    = Window:Tab({ Title = "Main",    Icon = "solar:home-bold" })
 local RuneTab    = Window:Tab({ Title = "Runes",   Icon = "solar:magic-stick-2-bold" })
@@ -118,7 +150,11 @@ end
 -- ==========================
 local function applyMods()
     local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
-    if hum then hum.WalkSpeed = mods.speed; hum.JumpPower = mods.jump; hum.UseJumpPower = true end
+    if hum then 
+        hum.WalkSpeed = mods.speed 
+        hum.JumpPower = mods.jump 
+        hum.UseJumpPower = true 
+    end
 end
 
 local PlayerSec = MiscTab:Section({ Title = "Modifications" })
@@ -177,7 +213,7 @@ RunService.Heartbeat:Connect(function(dt)
     for key, data in pairs(Features) do
         if states[key] then
             timers[key] = timers[key] + dt
-            if timers[key] >= bulk.speed then
+            if timers[key] >= (bulk.speed or 0.001) then
                 timers[key] = 0
                 local r = Remotes[data.remote]
                 if r then
@@ -189,4 +225,4 @@ RunService.Heartbeat:Connect(function(dt)
     end
 end)
 
-applyMods() -- Apply loaded speed/jump on start
+applyMods()
