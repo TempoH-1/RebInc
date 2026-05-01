@@ -3,17 +3,16 @@ local Players      = game:GetService("Players")
 local RS           = game:GetService("ReplicatedStorage")
 local RunService   = game:GetService("RunService")
 local HTTP         = game:GetService("HttpService")
-local UIS          = game:GetService("UserInputService")
 local player       = Players.LocalPlayer
 
 -- // FILE SYSTEM SETUP
 local FILE_NAME = "TempoHub_AutoSave.json"
 local function saveSettings(data)
-    writefile(FILE_NAME, HTTP:JSONEncode(data))
+    if writefile then writefile(FILE_NAME, HTTP:JSONEncode(data)) end
 end
 
 local function loadSettings()
-    if isfile(FILE_NAME) then
+    if isfile and isfile(FILE_NAME) then
         local success, decoded = pcall(function() return HTTP:JSONDecode(readfile(FILE_NAME)) end)
         if success then return decoded end
     end
@@ -23,46 +22,92 @@ end
 -- // LOAD DEFAULTS OR SAVED DATA
 local savedData = loadSettings() or {}
 
--- // FEATURES & STATES
-local Features = {
-    Ice         = { label = "Collect Ice",    remote = "CollectIce",    args = { "Normal",      Vector3.new(3.1364, 11.5126, 10784.038) } },
-    Bubble      = { label = "Collect Bubble", remote = "CollectBubble", args = { "Dark Matter", Vector3.new(-18.6984, 8.3374, 10582.273) } },
-    FishClick   = { label = "Fish Click",     remote = "FishClick",     args = {} },
-    BubblesRune = { label = "Rune: Bubbles",  remote = "RuneOpen",      args = { "Bubbles" } },
-    Water       = { label = "Rune: Water",    remote = "RuneOpen",      args = { "Water" } },
-    Depth       = { label = "Rune: Depth",    remote = "RuneOpen",      args = { "Depth" } },
-    IceRune     = { label = "Rune: Ice",      remote = "RuneOpen",      args = { "Ice" } },
-    FishRune    = { label = "Rune: Fish",     remote = "RuneOpen",      args = { "Fish" } },
+-- // REMOTES
+local GP = RS:WaitForChild("Remotes"):WaitForChild("Gameplay")
+local Remotes = {
+    Upgrade        = GP:WaitForChild("Upgrade"),
+    VoltageUpgrade = GP:WaitForChild("VoltageUpgrade"),
+    TierUp         = GP:WaitForChild("TierUp"),
+    Reborn         = GP:WaitForChild("Reborn"),
+    RuneOpen       = GP:WaitForChild("RuneOpen"),
 }
 
-local states = savedData.states or {}
-for k in pairs(Features) do if states[k] == nil then states[k] = false end end
-
-local bulk  = savedData.bulk or { count = 1, speed = 0.001 }
-local mods  = savedData.mods or { speed = 16, jump = 50, noclip = false }
-
--- // SYNC FUNCTION
-local function sync()
-    saveSettings({states = states, bulk = bulk, mods = mods})
-end
-
--- // LOAD WINDUI
-local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
-
--- // REMOTES
-local function getRemote(n)
-    for _, v in ipairs(RS:GetDescendants()) do
-        if v:IsA("RemoteEvent") and v.Name == n then return v end
+-- Resolve Farming Remotes
+for _, v in ipairs(RS:GetDescendants()) do
+    if v:IsA("RemoteEvent") then
+        if v.Name == "CollectIce" then Remotes.CollectIce = v
+        elseif v.Name == "CollectBubble" then Remotes.CollectBubble = v
+        elseif v.Name == "FishClick" then Remotes.FishClick = v end
     end
 end
-local Remotes = {
-    RuneOpen      = getRemote("RuneOpen"),
-    CollectIce    = getRemote("CollectIce"),
-    CollectBubble = getRemote("CollectBubble"),
-    FishClick     = getRemote("FishClick"),
+
+-- // DATA STRUCTURES
+local W1_Upgrades = {
+    { cat = "Energy", id = 1, label = "More Energy" },
+    { cat = "Energy", id = 2, label = "More Flux" },
+    { cat = "Energy", id = 3, label = "More Essence" },
+    { cat = "Energy", id = 4, label = "More Voltage" },
+    { cat = "Energy", id = 5, label = "More Rune Speed" },
+    { cat = "Flux", id = 1, label = "More Energy" },
+    { cat = "Flux", id = 2, label = "More Flux" },
+    { cat = "Flux", id = 3, label = "More Essence" },
+    { cat = "Flux", id = 4, label = "More Voltage" },
 }
 
--- // WINDOW
+local W2_Upgrades = {
+    -- Bubbles Board (Top)
+    { cat = "Bubbles", id = 1, label = "More Bubbles" },
+    { cat = "Bubbles", id = 2, label = "More Water" },
+    { cat = "Bubbles", id = 3, label = "More Cap" },
+    { cat = "Bubbles", id = 4, label = "More Range" },
+    { cat = "Bubbles", id = 5, label = "Faster Spawn" },
+    -- Water Board
+    { cat = "Water", id = 1, label = "More Bubbles" },
+    { cat = "Water", id = 2, label = "More Water" },
+    { cat = "Water", id = 3, label = "More Depth" },
+    { cat = "Water", id = 4, label = "More Ice" },
+    -- Ice Board
+    { cat = "Ice", id = 1, label = "More Ice" },
+    { cat = "Ice", id = 2, label = "More Bubbles" },
+    { cat = "Ice", id = 3, label = "More Water" },
+    { cat = "Ice", id = 4, label = "More Depth" },
+    { cat = "Ice", id = 5, label = "More Cap" },
+    { cat = "Ice", id = 6, label = "Faster Spawn" },
+    -- Fish Board (Bottom)
+    { cat = "Fish", id = 1, label = "More Fish" },
+    { cat = "Fish", id = 2, label = "More Bubbles" },
+    { cat = "Fish", id = 3, label = "More Water" },
+    { cat = "Fish", id = 4, label = "More Depth" },
+    { cat = "Fish", id = 5, label = "More Ice" },
+}
+
+local RuneList = {
+    { name = "Energy",  tab = "W1" },
+    { name = "Flux",    tab = "W1" },
+    { name = "Essence", tab = "W1" },
+    { name = "Voltage", tab = "W1" },
+    { name = "Bubbles", tab = "W2" },
+    { name = "Water",   tab = "W2" },
+    { name = "Depth",   tab = "W2" },
+    { name = "Ice",     tab = "W2" },
+    { name = "Fish",    tab = "W2" },
+}
+
+-- // STATES
+local states = savedData.states or {}
+local bulk   = savedData.bulk   or { count = 1, speed = 0.001 }
+local mods   = savedData.mods   or { speed = 16, jump = 50, noclip = false }
+
+-- Initialize States
+for _, r in ipairs(RuneList) do if states["Rune_"..r.name] == nil then states["Rune_"..r.name] = false end end
+for _, u in ipairs(W1_Upgrades) do if states["W1_"..u.cat.."_"..u.id] == nil then states["W1_"..u.cat.."_"..u.id] = false end end
+for _, u in ipairs(W2_Upgrades) do if states["W2_"..u.cat.."_"..u.id] == nil then states["W2_"..u.cat.."_"..u.id] = false end end
+for _, k in ipairs({"Ice", "Bubble", "FishClick", "AutoTier", "AutoReborn"}) do if states[k] == nil then states[k] = false end end
+
+local function sync() saveSettings({states = states, bulk = bulk, mods = mods}) end
+
+-- // UI LOAD
+local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
 local Window = WindUI:CreateWindow({
     Title  = "TempoHub_",
     Icon   = "fish",
@@ -70,158 +115,108 @@ local Window = WindUI:CreateWindow({
     NewElements = true,
 })
 
--- // MOBILE TOGGLE BUTTON
-local MobileButton = Instance.new("ScreenGui")
-local ButtonFrame = Instance.new("Frame")
-local ButtonImage = Instance.new("ImageButton")
-local UICorner = Instance.new("UICorner")
+-- Mobile Toggle
+local MobileButton = Instance.new("ScreenGui"); MobileButton.Name = "TempoHub_Mobile"; MobileButton.Parent = game:GetService("CoreGui")
+local ButtonFrame = Instance.new("Frame"); ButtonFrame.Parent = MobileButton; ButtonFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30); ButtonFrame.Position = UDim2.new(0.1, 0, 0.15, 0); ButtonFrame.Size = UDim2.new(0, 50, 0, 50); ButtonFrame.Active = true; ButtonFrame.Draggable = true
+local UICorner = Instance.new("UICorner"); UICorner.CornerRadius = UDim.new(0, 10); UICorner.Parent = ButtonFrame
+local ButtonImage = Instance.new("ImageButton"); ButtonImage.Parent = ButtonFrame; ButtonImage.BackgroundTransparency = 1; ButtonImage.Position = UDim2.new(0.1, 0, 0.1, 0); ButtonImage.Size = UDim2.new(0.8, 0, 0.8, 0); ButtonImage.Image = "rbxassetid://10723343321"
+ButtonImage.MouseButton1Click:Connect(function() Window:Toggle() end)
 
-MobileButton.Name = "TempoHub_Mobile"
-MobileButton.Parent = game.CoreGui
-MobileButton.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-
-ButtonFrame.Name = "ButtonFrame"
-ButtonFrame.Parent = MobileButton
-ButtonFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-ButtonFrame.Position = UDim2.new(0.1, 0, 0.15, 0)
-ButtonFrame.Size = UDim2.new(0, 50, 0, 50)
-ButtonFrame.Active = true
-ButtonFrame.Draggable = true
-
-UICorner.CornerRadius = UDim.new(0, 10)
-UICorner.Parent = ButtonFrame
-
-ButtonImage.Parent = ButtonFrame
-ButtonImage.BackgroundTransparency = 1
-ButtonImage.Position = UDim2.new(0.1, 0, 0.1, 0)
-ButtonImage.Size = UDim2.new(0.8, 0, 0.8, 0)
-ButtonImage.Image = "rbxassetid://10723343321" -- Fish Icon
-
-ButtonImage.MouseButton1Click:Connect(function()
-    Window:Toggle()
-end)
-
--- // TABS
+-- TABS
 local MainTab    = Window:Tab({ Title = "Main",    Icon = "solar:home-bold" })
+local W1Tab      = Window:Tab({ Title = "World 1", Icon = "solar:globus-bold" })
+local W2Tab      = Window:Tab({ Title = "World 2", Icon = "solar:planet-bold" })
 local RuneTab    = Window:Tab({ Title = "Runes",   Icon = "solar:magic-stick-2-bold" })
 local MiscTab    = Window:Tab({ Title = "Misc",    Icon = "solar:user-bold" })
 local SettingsTab= Window:Tab({ Title = "Settings",Icon = "solar:settings-bold" })
-local CreditsTab = Window:Tab({ Title = "Credits", Icon = "solar:heart-bold" })
 
--- ==========================
--- MAIN / FARM
--- ==========================
+-- MAIN
 local FarmSec = MainTab:Section({ Title = "Farming" })
-for _, k in ipairs({"Ice", "Bubble", "FishClick"}) do
-    FarmSec:Toggle({
-        Title = Features[k].label,
-        Value = states[k],
-        Callback = function(v) states[k] = v; sync() end
-    })
-end
+FarmSec:Toggle({ Title = "Collect Ice", Value = states.Ice, Callback = function(v) states.Ice = v; sync() end })
+FarmSec:Toggle({ Title = "Collect Bubble", Value = states.Bubble, Callback = function(v) states.Bubble = v; sync() end })
+FarmSec:Toggle({ Title = "Fish Click", Value = states.FishClick, Callback = function(v) states.FishClick = v; sync() end })
 
 local BulkSec = MainTab:Section({ Title = "Bulk Settings" })
-BulkSec:Slider({ 
-    Title = "Remotes per tick", 
-    Value = {Min=1, Max=50, Default = bulk.count}, 
-    Callback = function(v) bulk.count = v; sync() end 
-})
-BulkSec:Slider({ 
-    Title = "Loop Delay", 
-    Step=0.001, 
-    Value = {Min=0.001, Max=1, Default = bulk.speed}, 
-    Callback = function(v) bulk.speed = v; sync() end 
-})
+BulkSec:Slider({ Title = "Remotes per tick", Value = {Min=1, Max=50, Default = bulk.count}, Callback = function(v) bulk.count = v; sync() end })
+BulkSec:Slider({ Title = "Loop Delay", Step=0.001, Value = {Min=0.001, Max=1, Default = bulk.speed}, Callback = function(v) bulk.speed = v; sync() end })
 
--- ==========================
--- RUNES
--- ==========================
-local RuneSec = RuneTab:Section({ Title = "Auto Runes" })
-for _, k in ipairs({"BubblesRune", "Water", "Depth", "IceRune", "FishRune"}) do
-    RuneSec:Toggle({ 
-        Title = Features[k].label, 
-        Value = states[k], 
-        Callback = function(v) states[k] = v; sync() end 
-    })
+-- RUNES (Corrected logic)
+local R1Sec = RuneTab:Section({ Title = "World 1 Runes" })
+local R2Sec = RuneTab:Section({ Title = "World 2 Runes" })
+for _, r in ipairs(RuneList) do
+    local sec = (r.tab == "W1") and R1Sec or R2Sec
+    sec:Toggle({ Title = "Auto " .. r.name .. " Rune", Value = states["Rune_"..r.name], Callback = function(v) states["Rune_"..r.name] = v; sync() end })
 end
 
--- ==========================
--- MISC / PLAYER
--- ==========================
+-- WORLD 1 UPGRADES
+local w1_currentCat = ""
+local w1_sec = nil
+for _, u in ipairs(W1_Upgrades) do
+    if u.cat ~= w1_currentCat then
+        w1_currentCat = u.cat
+        w1_sec = W1Tab:Section({ Title = w1_currentCat .. " Upgrades" })
+    end
+    w1_sec:Toggle({ Title = u.label, Value = states["W1_"..u.cat.."_"..u.id], Callback = function(v) states["W1_"..u.cat.."_"..u.id] = v; sync() end })
+end
+local ProgSec = W1Tab:Section({ Title = "Progression" })
+ProgSec:Toggle({ Title = "Auto Tier Up", Value = states.AutoTier, Callback = function(v) states.AutoTier = v; sync() end })
+ProgSec:Toggle({ Title = "Auto Reborn Once", Value = states.AutoReborn, Callback = function(v) states.AutoReborn = v; sync() end })
+
+-- WORLD 2 UPGRADES (Ordered)
+local w2_currentCat = ""
+local w2_sec = nil
+for _, u in ipairs(W2_Upgrades) do
+    if u.cat ~= w2_currentCat then
+        w2_currentCat = u.cat
+        w2_sec = W2Tab:Section({ Title = w2_currentCat .. " Upgrades" })
+    end
+    w2_sec:Toggle({ Title = u.label, Value = states["W2_"..u.cat.."_"..u.id], Callback = function(v) states["W2_"..u.cat.."_"..u.id] = v; sync() end })
+end
+
+-- MISC
+local PlayerSec = MiscTab:Section({ Title = "Modifications" })
 local function applyMods()
     local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
-    if hum then 
-        hum.WalkSpeed = mods.speed 
-        hum.JumpPower = mods.jump 
-        hum.UseJumpPower = true 
-    end
+    if hum then hum.WalkSpeed = mods.speed; hum.JumpPower = mods.jump; hum.UseJumpPower = true end
 end
+PlayerSec:Slider({ Title = "WalkSpeed", Value = {Min=16, Max=500, Default = mods.speed}, Callback = function(v) mods.speed = v; applyMods(); sync() end })
+PlayerSec:Slider({ Title = "JumpPower", Value = {Min=50, Max=500, Default = mods.jump}, Callback = function(v) mods.jump = v; applyMods(); sync() end })
+PlayerSec:Toggle({ Title = "Noclip", Value = mods.noclip, Callback = function(v) mods.noclip = v; sync() end })
 
-local PlayerSec = MiscTab:Section({ Title = "Modifications" })
-PlayerSec:Slider({ 
-    Title = "WalkSpeed", 
-    Value = {Min=16, Max=500, Default = mods.speed}, 
-    Callback = function(v) mods.speed = v; applyMods(); sync() end 
-})
-PlayerSec:Slider({ 
-    Title = "JumpPower", 
-    Value = {Min=50, Max=500, Default = mods.jump}, 
-    Callback = function(v) mods.jump = v; applyMods(); sync() end 
-})
-PlayerSec:Toggle({ 
-    Title = "Noclip", 
-    Value = mods.noclip, 
-    Callback = function(v) mods.noclip = v; sync() end 
-})
-
--- ==========================
 -- SETTINGS
--- ==========================
-local SetSec = SettingsTab:Section({ Title = "UI Options" })
-SetSec:Keybind({
-    Title = "Toggle UI Keybind",
-    Value = "K",
-    Callback = function(key) Window:SetToggleKey(Enum.KeyCode[key]) end
-})
-SetSec:Button({
-    Title = "Clear Auto-Save",
-    Callback = function()
-        if isfile(FILE_NAME) then delfile(FILE_NAME) end
-        WindUI:Notify({Title="Cleaned", Content="Restart script to reset defaults"})
-    end
-})
+SettingsTab:Section({ Title = "UI Key" }):Keybind({ Title = "Toggle UI Keybind", Value = "K", Callback = function(key) Window:SetToggleKey(Enum.KeyCode[key]) end })
 
--- ==========================
--- CREDITS
--- ==========================
-local CredSec = CreditsTab:Section({ Title = "Project Staff" })
-CredSec:Paragraph({ Title = "GUI & System", Desc = "TempoH_" })
-CredSec:Paragraph({ Title = "Code", Desc = "Wayjim" })
-
--- ==========================
--- CORE LOOP
--- ==========================
-local timers = {}
-for k in pairs(Features) do timers[k] = 0 end
-
+-- // CORE LOOPS
+local timers = { fast = 0, slow = 0 }
 RunService.Heartbeat:Connect(function(dt)
     if mods.noclip and player.Character then
-        for _, p in ipairs(player.Character:GetDescendants()) do
-            if p:IsA("BasePart") then p.CanCollide = false end
-        end
+        for _, p in ipairs(player.Character:GetDescendants()) do if p:IsA("BasePart") then p.CanCollide = false end end
     end
-    for key, data in pairs(Features) do
-        if states[key] then
-            timers[key] = timers[key] + dt
-            if timers[key] >= (bulk.speed or 0.001) then
-                timers[key] = 0
-                local r = Remotes[data.remote]
-                if r then
-                    local count = (key == "Ice" or key == "Bubble") and bulk.count or 1
-                    for _ = 1, count do r:FireServer(unpack(data.args)) end
-                end
+
+    -- HIGH SPEED (Runes + Farming)
+    timers.fast = timers.fast + dt
+    if timers.fast >= (bulk.speed or 0.001) then
+        timers.fast = 0
+        -- Farming
+        if states.Ice and Remotes.CollectIce then for _=1, bulk.count do Remotes.CollectIce:FireServer("Normal", Vector3.new(3.1364, 11.5126, 10784.038)) end end
+        if states.Bubble and Remotes.CollectBubble then for _=1, bulk.count do Remotes.CollectBubble:FireServer("Dark Matter", Vector3.new(-18.6984, 8.3374, 10582.273)) end end
+        if states.FishClick and Remotes.FishClick then for _=1, bulk.count do Remotes.FishClick:FireServer() end end
+        -- Runes
+        for _, r in ipairs(RuneList) do
+            if states["Rune_"..r.name] and Remotes.RuneOpen then
+                for _=1, bulk.count do Remotes.RuneOpen:FireServer(r.name) end
             end
         end
+    end
+
+    -- SLOW LOOP (Upgrades)
+    timers.slow = timers.slow + dt
+    if timers.slow >= 1.5 then
+        timers.slow = 0
+        for _, u in ipairs(W1_Upgrades) do if states["W1_"..u.cat.."_"..u.id] then Remotes.Upgrade:FireServer(u.cat, u.id, false) end end
+        for _, u in ipairs(W2_Upgrades) do if states["W2_"..u.cat.."_"..u.id] then Remotes.Upgrade:FireServer(u.cat, u.id, false) end end
+        if states.AutoTier then Remotes.TierUp:FireServer() end
+        if states.AutoReborn then Remotes.Reborn:FireServer("RebornHitbox1") end
     end
 end)
 
