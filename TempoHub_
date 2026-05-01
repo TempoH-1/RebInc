@@ -1,0 +1,192 @@
+-- // SERVICES
+local Players      = game:GetService("Players")
+local RS           = game:GetService("ReplicatedStorage")
+local RunService   = game:GetService("RunService")
+local HTTP         = game:GetService("HttpService")
+local player       = Players.LocalPlayer
+
+-- // FILE SYSTEM SETUP
+local FILE_NAME = "TempoHub_AutoSave.json"
+local function saveSettings(data)
+    writefile(FILE_NAME, HTTP:JSONEncode(data))
+end
+
+local function loadSettings()
+    if isfile(FILE_NAME) then
+        local success, decoded = pcall(function() return HTTP:JSONDecode(readfile(FILE_NAME)) end)
+        if success then return decoded end
+    end
+    return nil
+end
+
+-- // LOAD DEFAULTS OR SAVED DATA
+local savedData = loadSettings() or {}
+
+-- // FEATURES & STATES
+local Features = {
+    Ice         = { label = "Collect Ice",    remote = "CollectIce",    args = { "Normal",      Vector3.new(3.1364, 11.5126, 10784.038) } },
+    Bubble      = { label = "Collect Bubble", remote = "CollectBubble", args = { "Dark Matter", Vector3.new(-18.6984, 8.3374, 10582.273) } },
+    FishClick   = { label = "Fish Click",     remote = "FishClick",     args = {} },
+    BubblesRune = { label = "Rune: Bubbles",  remote = "RuneOpen",      args = { "Bubbles" } },
+    Water       = { label = "Rune: Water",    remote = "RuneOpen",      args = { "Water" } },
+    Depth       = { label = "Rune: Depth",    remote = "RuneOpen",      args = { "Depth" } },
+    IceRune     = { label = "Rune: Ice",      remote = "RuneOpen",      args = { "Ice" } },
+    FishRune    = { label = "Rune: Fish",     remote = "RuneOpen",      args = { "Fish" } },
+}
+
+local states = savedData.states or {}
+for k in pairs(Features) do if states[k] == nil then states[k] = false end end
+
+local bulk  = savedData.bulk or { count = 1, speed = 0.001 }
+local mods  = savedData.mods or { speed = 16, jump = 50, noclip = false }
+
+-- // SYNC FUNCTION
+local function sync()
+    saveSettings({states = states, bulk = bulk, mods = mods})
+end
+
+-- // LOAD WINDUI
+local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
+
+-- // REMOTES
+local function getRemote(n)
+    for _, v in ipairs(RS:GetDescendants()) do
+        if v:IsA("RemoteEvent") and v.Name == n then return v end
+    end
+end
+local Remotes = {
+    RuneOpen      = getRemote("RuneOpen"),
+    CollectIce    = getRemote("CollectIce"),
+    CollectBubble = getRemote("CollectBubble"),
+    FishClick     = getRemote("FishClick"),
+}
+
+-- // WINDOW
+local Window = WindUI:CreateWindow({
+    Title  = "TempoHub_",
+    Icon   = "fish",
+    Author = "By TempoH_ & Wayjim",
+    NewElements = true,
+})
+
+-- // TABS
+local MainTab    = Window:Tab({ Title = "Main",    Icon = "solar:home-bold" })
+local RuneTab    = Window:Tab({ Title = "Runes",   Icon = "solar:magic-stick-2-bold" })
+local MiscTab    = Window:Tab({ Title = "Misc",    Icon = "solar:user-bold" })
+local SettingsTab= Window:Tab({ Title = "Settings",Icon = "solar:settings-bold" })
+local CreditsTab = Window:Tab({ Title = "Credits", Icon = "solar:heart-bold" })
+
+-- ==========================
+-- MAIN / FARM
+-- ==========================
+local FarmSec = MainTab:Section({ Title = "Farming" })
+for _, k in ipairs({"Ice", "Bubble", "FishClick"}) do
+    FarmSec:Toggle({
+        Title = Features[k].label,
+        Value = states[k],
+        Callback = function(v) states[k] = v; sync() end
+    })
+end
+
+local BulkSec = MainTab:Section({ Title = "Bulk Settings" })
+BulkSec:Slider({ 
+    Title = "Remotes per tick", 
+    Value = {Min=1, Max=50, Default = bulk.count}, 
+    Callback = function(v) bulk.count = v; sync() end 
+})
+BulkSec:Slider({ 
+    Title = "Loop Delay", 
+    Step=0.001, 
+    Value = {Min=0.001, Max=1, Default = bulk.speed}, 
+    Callback = function(v) bulk.speed = v; sync() end 
+})
+
+-- ==========================
+-- RUNES
+-- ==========================
+local RuneSec = RuneTab:Section({ Title = "Auto Runes" })
+for _, k in ipairs({"BubblesRune", "Water", "Depth", "IceRune", "FishRune"}) do
+    RuneSec:Toggle({ 
+        Title = Features[k].label, 
+        Value = states[k], 
+        Callback = function(v) states[k] = v; sync() end 
+    })
+end
+
+-- ==========================
+-- MISC / PLAYER
+-- ==========================
+local function applyMods()
+    local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+    if hum then hum.WalkSpeed = mods.speed; hum.JumpPower = mods.jump; hum.UseJumpPower = true end
+end
+
+local PlayerSec = MiscTab:Section({ Title = "Modifications" })
+PlayerSec:Slider({ 
+    Title = "WalkSpeed", 
+    Value = {Min=16, Max=500, Default = mods.speed}, 
+    Callback = function(v) mods.speed = v; applyMods(); sync() end 
+})
+PlayerSec:Slider({ 
+    Title = "JumpPower", 
+    Value = {Min=50, Max=500, Default = mods.jump}, 
+    Callback = function(v) mods.jump = v; applyMods(); sync() end 
+})
+PlayerSec:Toggle({ 
+    Title = "Noclip", 
+    Value = mods.noclip, 
+    Callback = function(v) mods.noclip = v; sync() end 
+})
+
+-- ==========================
+-- SETTINGS
+-- ==========================
+local SetSec = SettingsTab:Section({ Title = "UI Options" })
+SetSec:Keybind({
+    Title = "Toggle UI Keybind",
+    Value = "K",
+    Callback = function(key) Window:SetToggleKey(Enum.KeyCode[key]) end
+})
+SetSec:Button({
+    Title = "Clear Auto-Save",
+    Callback = function()
+        if isfile(FILE_NAME) then delfile(FILE_NAME) end
+        WindUI:Notify({Title="Cleaned", Content="Restart script to reset defaults"})
+    end
+})
+
+-- ==========================
+-- CREDITS
+-- ==========================
+local CredSec = CreditsTab:Section({ Title = "Project Staff" })
+CredSec:Paragraph({ Title = "GUI & System", Desc = "TempoH_" })
+CredSec:Paragraph({ Title = "Code", Desc = "Wayjim" })
+
+-- ==========================
+-- CORE LOOP
+-- ==========================
+local timers = {}
+for k in pairs(Features) do timers[k] = 0 end
+
+RunService.Heartbeat:Connect(function(dt)
+    if mods.noclip and player.Character then
+        for _, p in ipairs(player.Character:GetDescendants()) do
+            if p:IsA("BasePart") then p.CanCollide = false end
+        end
+    end
+    for key, data in pairs(Features) do
+        if states[key] then
+            timers[key] = timers[key] + dt
+            if timers[key] >= bulk.speed then
+                timers[key] = 0
+                local r = Remotes[data.remote]
+                if r then
+                    local count = (key == "Ice" or key == "Bubble") and bulk.count or 1
+                    for _ = 1, count do r:FireServer(unpack(data.args)) end
+                end
+            end
+        end
+    end
+end)
+
+applyMods() -- Apply loaded speed/jump on start
