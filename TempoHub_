@@ -211,7 +211,7 @@ RunService.Heartbeat:Connect(function(dt)
 
     -- SLOW LOOP (Upgrades)
     timers.slow = timers.slow + dt
-    if timers.slow >= 1.5 then
+    if timers.slow >= 0.25 then
         timers.slow = 0
         for _, u in ipairs(W1_Upgrades) do if states["W1_"..u.cat.."_"..u.id] then Remotes.Upgrade:FireServer(u.cat, u.id, false) end end
         for _, u in ipairs(W2_Upgrades) do if states["W2_"..u.cat.."_"..u.id] then Remotes.Upgrade:FireServer(u.cat, u.id, false) end end
